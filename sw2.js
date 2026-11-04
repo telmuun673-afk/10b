@@ -1,4 +1,5 @@
-var CACHE="10b-v3";
+// 10Б анги service worker (push дэмжинэ) v4
+var CACHE="10b-v4";
 self.addEventListener("install", function(e){ self.skipWaiting(); });
 self.addEventListener("activate", function(e){ e.waitUntil(self.clients.claim()); });
 self.addEventListener("fetch", function(e){
@@ -14,11 +15,9 @@ self.addEventListener("fetch", function(e){
 });
 self.addEventListener("push", function(e){
   var d={}; try{ d=e.data.json(); }catch(x){ try{ d={body:e.data.text()}; }catch(y){} }
-  e.waitUntil(self.clients.matchAll({type:"window",includeUncontrolled:true}).then(function(list){
-    for(var i=0;i<list.length;i++){ if(list[i].visibilityState==="visible") return; }
-    return self.registration.showNotification(d.title||"10Б анги",{
-      body:d.body||"", icon:"icon-192.png", badge:"icon-192.png", data:{tab:d.tab||"home"}
-    });
+  e.waitUntil(self.registration.showNotification(d.title||"10Б анги",{
+    body:d.body||"", icon:"icon-192.png", badge:"icon-192.png", data:{tab:d.tab||"home"},
+    vibrate:[250,120,250,120,250], tag:"10b-"+(d.tab||"home"), renotify:true, requireInteraction:false
   }));
 });
 self.addEventListener("notificationclick", function(e){
