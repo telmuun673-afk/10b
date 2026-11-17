@@ -1,0 +1,20 @@
+name: check
+on: workflow_dispatch
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    env:
+      OLD: ${{ secrets.OLD_DB_URL }}
+      NEW: ${{ secrets.NEW_DB_URL }}
+    steps:
+      - run: |
+          psql "$NEW" -c "create extension if not exists pg_net with schema extensions"
+          Q="select table_name,(xpath('/row/c/text()',query_to_xml(format('select count(*) as c from public.%I',table_name),false,true,'')))[1]::text from information_schema.tables where table_schema='public' and table_type='BASE TABLE' order by 1"
+          psql "$OLD" -At -c "$Q" > o.txt
+          psql "$NEW" -At -c "$Q" > n.txt
+          echo "tables: $(wc -l < n.txt)"
+          diff o.txt n.txt && echo SAME
+          psql "$OLD" -At -c "select id,public from storage.buckets"
+          psql "$OLD" -At -c "select bucket_id,count(*) from storage.objects group by 1"
+          psql "$OLD" -At -c "select policyname,cmd from pg_policies where schemaname='storage'"
+          psql "$OLD" -At -c "select proname from pg_proc where prosrc ilike '%http_post%' and pronamespace='public'::regnamespace"
