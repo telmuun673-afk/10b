@@ -1,0 +1,30 @@
+name: storage
+on: workflow_dispatch
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    env:
+      OLD: ${{ secrets.OLD_DB_URL }}
+      NEW: ${{ secrets.NEW_DB_URL }}
+    steps:
+      - run: |
+          psql "$NEW" -c "insert into storage.buckets(id,name,public) values('uploads','uploads',true) on conflict do nothing" -c "create policy \"uploads read\" on storage.objects for select using (bucket_id='uploads')" -c "create policy \"uploads insert\" on storage.objects for insert with check (bucket_id='uploads')"
+          python3 - <<'EOF'
+          import os,subprocess,urllib.request as u,urllib.parse as p
+          K="sb_publishable_p25aWR6R_HXV0NJf58z6Yg__kzZPAKM"
+          O="https://lzaxbunmrwtegzqgvpwl.supabase.co/storage/v1/object/public/uploads/"
+          N="https://fpjyqtjppnvotxievevn.supabase.co/storage/v1/object/uploads/"
+          s=subprocess.check_output(["psql",os.environ["OLD"],"-At","-c","select name from storage.objects where bucket_id='uploads'"],text=True).splitlines()
+          ok=0
+          for n in s:
+            q=p.quote(n)
+            try:
+              a=u.urlopen(O+q)
+              h={"apikey":K,"Authorization":"Bearer "+K,"Content-Type":a.headers.get("Content-Type","application/octet-stream"),"cache-control":"max-age=31536000"}
+              u.urlopen(u.Request(N+q,a.read(),h,method="POST"))
+              ok+=1
+            except Exception as e:
+              print("FAIL",n,e)
+          print("copied",ok,"of",len(s))
+          EOF
+          psql "$NEW" -c "update students set avatar_url=replace(avatar_url,'lzaxbunmrwtegzqgvpwl','fpjyqtjppnvotxievevn') where avatar_url like '%lzaxbunmrwtegzqgvpwl%'"
