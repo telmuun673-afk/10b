@@ -1,0 +1,32 @@
+name: migrate
+on: workflow_dispatch
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    env:
+      OLD: ${{ secrets.OLD_DB_URL }}
+      NEW: ${{ secrets.NEW_DB_URL }}
+      R: postgres,anon,authenticated,service_role
+    steps:
+      - name: Install
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq postgresql-client-17
+      - name: Dump
+        run: |
+          pg_dump "$OLD" -n public --no-owner -f public.sql
+          psql "$OLD" -At -c "select format('select cron.schedule(%L,%L,%L);',jobname,schedule,command) from cron.job where active" > cron.sql
+          psql "$OLD" -At -c "select format('alter publication supabase_realtime add table public.%I;',tablename) from pg_publication_tables where pubname='supabase_realtime' and schemaname='public'" > pub.sql
+          psql "$OLD" -At -c "select extname from pg_extension" > ext.txt
+      - name: Restore
+        run: |
+          for e in $(cat ext.txt); do psql "$NEW" -c "create extension if not exists \"$e\"" || true; done
+          psql "$NEW" -c "drop schema if exists public cascade" -c "create schema public" -c "grant all on schema public to $R"
+          psql "$NEW" -c "alter default privileges for role postgres in schema public grant all on tables to $R" -c "alter default privileges for role postgres in schema public grant all on sequences to $R" -c "alter default privileges for role postgres in schema public grant all on functions to $R"
+          PGOPTIONS='-c session_replication_role=replica' psql "$NEW" -f public.sql > restore.log 2>&1 || true
+          psql "$NEW" -f pub.sql || true
+          psql "$NEW" -f cron.sql || true
+          grep -c ERROR restore.log || true
+          grep ERROR restore.log | sort | uniq -c | sort -rn | head -12 || true
