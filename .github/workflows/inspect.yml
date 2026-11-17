@@ -1,0 +1,11 @@
+name: inspect
+on: workflow_dispatch
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    env:
+      NEW: ${{ secrets.NEW_DB_URL }}
+    steps:
+      - run: |
+          psql "$NEW" -At -c "select (regexp_matches(prosrc,'https?://[^''\" )]+','g'))[1] from pg_proc where proname='_push'"
+          psql "$NEW" -At -c "select table_name||'.'||column_name from information_schema.columns where table_schema='public' and data_type in ('text','jsonb','character varying') and (xpath('/row/c/text()',query_to_xml(format('select count(*) as c from public.%I where %I::text like %L',table_name,column_name,'%lzaxbunmrwtegzqgvpwl%'),false,true,'')))[1]::text<>'0'"
